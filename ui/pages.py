@@ -304,12 +304,6 @@ def random_album_page():
     # Introduction
     st.markdown("""
     **Discover new music based on the albums in the wall!**
-    
-    This feature:
-    1. 🎯 Picks a random album from the wall
-    2. 🔗 Finds artists related to that album's artist
-    3. 🎸 Picks a random related artist
-    4. 🎵 Shows you a random album from that artist
     """)
     
     st.divider()
@@ -421,6 +415,7 @@ def random_album_page():
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
                             st.success("✅ Album posted to wall!")
+                            show_success_message("✅ Album posted successfully!")
                         else:
                             st.error("❌ Failed to post to wall")
                     else:
