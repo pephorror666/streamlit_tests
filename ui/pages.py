@@ -147,10 +147,9 @@ def render_album_form():
 def handle_album_submission(url: str, tags_input: str, is_manual: bool = False, 
                            artist: str = "", album_name: str = "", cover_url: str = ""):
     """Handle album form submission"""
-    # Cover handling
+    # Cover handeling
     if cover_url == "":
         cover_url = "https://upload.wikimedia.org/wikipedia/commons/3/3c/No-album-art.png"
-    
     # Check for duplicate URL
     if check_duplicate_url(url):
         st.error("❌ This URL has already been posted. Please share a different album.")
@@ -168,8 +167,6 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
                 "Other",
                 tags
             ):
-                # Clear cache to ensure new data is loaded
-                st.cache_data.clear()
                 show_success_message("✅ Album shared successfully!")
                 st.session_state.show_album_form = False
                 st.rerun()
@@ -195,8 +192,6 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
                         metadata['platform'],
                         tags
                     ):
-                        # Clear cache to ensure new data is loaded
-                        st.cache_data.clear()
                         show_success_message("✅ Album shared successfully!")
                         st.session_state.show_album_form = False
                         st.rerun()
@@ -285,8 +280,6 @@ def render_concert_form():
             if bands and venue and city:
                 tags = process_tags(tags_input)
                 if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
-                    # Clear cache to ensure new data is loaded
-                    st.cache_data.clear()
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False
                     st.rerun()
@@ -385,7 +378,8 @@ def random_album_page():
             col_idx = 0
             
             with col_actions[col_idx]:
-                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
+                with col_actions[col_idx]:
+                    st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
             
             # Add Bandcamp button if available
@@ -413,32 +407,20 @@ def random_album_page():
             
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                        use_container_width=True,
-                        key="post_to_wall"):
+                           use_container_width=True,
+                           key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
+                        tags_input = "#randomdiscovery"
                         
-                        # Get the metal tags list from the discovery
-                        metal_tags = discovery.get('metal_tags', [])
-                        
-                        # Convert the list to a string format that process_tags expects
-                        if metal_tags:
-                            # Take up to 3 metal tags and format them with #
-                            tags_to_use = ' '.join([f"#{tag}" for tag in metal_tags[:3]])
-                        else:
-                            tags_to_use = "#randomdiscovery"
-                        
-                        # Call the handle_album_submission function with proper handling
-                        success = handle_album_submission(url, tags_to_use, is_manual=False)
-                        
-                        # Clear the discovery data to force a refresh
+                        # Call the handle_album_submission function
+                        success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
-                            # Clear the discovery data so next time it fetches fresh data
-                            st.session_state.random_discovery_data = None
-                            st.success("✅ Album posted to wall! The wall has been updated.")
-                            # Force a rerun to refresh the page
-                            st.rerun()
+                            st.success("✅ Album posted to wall!")
+                            show_success_message("✅ Album posted successfully!")
+                        else:
+                            st.error("❌ Failed to post to wall")
                     else:
                         st.warning("Please login to post to wall")
         

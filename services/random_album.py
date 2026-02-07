@@ -7,7 +7,6 @@ import streamlit as st
 import random
 import time
 import difflib
-import re
 from typing import Optional, Dict, Tuple, List
 from database.operations import load_albums, save_discovery
 from services.spotify_service import get_spotify_client, get_related_artists_spotify, get_random_album_by_artist
@@ -111,42 +110,14 @@ def search_lastfm_artist(lastfm_client, album_name: str, artist_name: str) -> Op
     
     return None
 
-def format_tags_for_posting(tags: List[str]) -> str:
-    """
-    Format Last.fm tags for posting to the wall
-    Returns: string of tags (e.g., "#deathmetal #blackmetal #thrash")
-    """
-    if not tags:
-        return "#randomdiscovery"
-    
-    # Clean and format tags
-    cleaned_tags = []
-    for tag in tags[:3]:  # Limit to 3 tags
-        # Remove special characters and spaces, convert to lowercase
-        cleaned = re.sub(r'[^\w\s]', '', tag)
-        cleaned = cleaned.lower().replace(' ', '')
-        
-        # Ensure it's a valid tag (at least 2 characters)
-        if len(cleaned) >= 2:
-            # Capitalize first letter for better readability
-            cleaned = cleaned.capitalize() if cleaned.islower() else cleaned
-            cleaned_tags.append(f"#{cleaned}")
-    
-    # If no valid tags found, use default
-    if not cleaned_tags:
-        return "#randomdiscovery"
-    
-    # Return as space-separated string
-    return ' '.join(cleaned_tags)
-
-def validate_and_correct_metal_album(lastfm_client, spotify_album_data: Dict, original_artist: str = None) -> Tuple[Optional[Dict], bool, str, List[str]]:
+def validate_and_correct_metal_album(lastfm_client, spotify_album_data: Dict, original_artist: str = None) -> Tuple[Optional[Dict], bool, str]:
     """
     STRICT validation if an album is metal with double checking
-    Returns: (corrected_album_data, is_valid, validation_message, lastfm_tags)
+    Returns: (corrected_album_data, is_valid, validation_message)
     """
     if not lastfm_client:
         # If no Last.fm client, we can't validate properly
-        return spotify_album_data, True, "Warning: No Last.fm validation available", []
+        return spotify_album_data, True, "Warning: No Last.fm validation available"
     
     artist_name = spotify_album_data.get('artist', '')
     album_name = spotify_album_data.get('album', '')
@@ -159,26 +130,16 @@ def validate_and_correct_metal_album(lastfm_client, spotify_album_data: Dict, or
         if original_artist:
             similarity = difflib.SequenceMatcher(None, artist_name.lower(), original_artist.lower()).ratio()
             if similarity < 0.7:  # 70% similarity threshold
-                return None, False, f"Artist name mismatch: '{artist_name}' vs '{original_artist}'", []
+                return None, False, f"Artist name mismatch: '{artist_name}' vs '{original_artist}'"
         
         # Additional verification: check if metal tags are prominent
         metal_tag_count = sum(1 for tag in spotify_artist_tags 
                             if any(keyword in tag for keyword in METAL_KEYWORDS))
         
         if metal_tag_count >= 1:  # At least one strong metal tag
-            # Extract metal tags for tagging
-            metal_tags = [tag for tag in spotify_artist_tags 
-                         if any(keyword in tag for keyword in METAL_KEYWORDS)]
-            
-            # Add tags to album data
-            spotify_album_data['lastfm_tags'] = spotify_artist_tags
-            spotify_album_data['metal_tags'] = metal_tags
-            # Add formatted tags for easy access
-            spotify_album_data['formatted_tags'] = format_tags_for_posting(metal_tags)
-            
-            return spotify_album_data, True, f"✅ Validated as metal ({metal_tag_count} metal tags found)", spotify_artist_tags
+            return spotify_album_data, True, f"✅ Validated as metal ({metal_tag_count} metal tags found)"
         else:
-            return None, False, "Not enough metal tags found", []
+            return None, False, "Not enough metal tags found"
     
     # Step 2: Search for the album on Last.fm to get correct artist info
     lastfm_info = search_lastfm_artist(lastfm_client, album_name, artist_name)
@@ -195,22 +156,16 @@ def validate_and_correct_metal_album(lastfm_client, spotify_album_data: Dict, or
             if original_artist:
                 similarity = difflib.SequenceMatcher(None, corrected_artist.lower(), original_artist.lower()).ratio()
                 if similarity < 0.7:
-                    return None, False, f"Corrected artist name mismatch: '{corrected_artist}' vs '{original_artist}'", []
+                    return None, False, f"Corrected artist name mismatch: '{corrected_artist}' vs '{original_artist}'"
             
-            # Update the album data with corrected artist and tags
+            # Update the album data with corrected artist
             spotify_album_data['artist'] = corrected_artist
             spotify_album_data['lastfm_tags'] = corrected_tags
-            
-            # Extract metal tags
-            metal_tags = [tag for tag in corrected_tags 
-                         if any(keyword in tag for keyword in METAL_KEYWORDS)]
-            spotify_album_data['metal_tags'] = metal_tags
-            spotify_album_data['formatted_tags'] = format_tags_for_posting(metal_tags)
             
             metal_tag_count = sum(1 for tag in corrected_tags 
                                 if any(keyword in tag for keyword in METAL_KEYWORDS))
             
-            return spotify_album_data, True, f"✅ Corrected and validated as metal ({metal_tag_count} metal tags)", corrected_tags
+            return spotify_album_data, True, f"✅ Corrected and validated as metal ({metal_tag_count} metal tags)"
     
     # Step 4: Check for similar artists that are metal
     try:
@@ -225,23 +180,14 @@ def validate_and_correct_metal_album(lastfm_client, spotify_album_data: Dict, or
                 # Check if original artist name matches similar metal artist
                 similarity = difflib.SequenceMatcher(None, artist_name.lower(), similar_name.lower()).ratio()
                 if similarity > 0.8:  # 80% similarity
-                    # Add tags to album data
-                    spotify_album_data['lastfm_tags'] = similar_tags
-                    
-                    # Extract metal tags
-                    metal_tags = [tag for tag in similar_tags 
-                                 if any(keyword in tag for keyword in METAL_KEYWORDS)]
-                    spotify_album_data['metal_tags'] = metal_tags
-                    spotify_album_data['formatted_tags'] = format_tags_for_posting(metal_tags)
-                    
                     metal_tag_count = sum(1 for tag in similar_tags 
                                         if any(keyword in tag for keyword in METAL_KEYWORDS))
-                    return spotify_album_data, True, f"✅ Validated via similar artist ({metal_tag_count} metal tags)", similar_tags
+                    return spotify_album_data, True, f"✅ Validated via similar artist ({metal_tag_count} metal tags)"
     
     except Exception:
         pass
     
-    return None, False, "Not a validated metal artist", []
+    return None, False, "Not a validated metal artist"
 
 def get_metal_related_artists(lastfm_client, base_artist: str, max_results: int = 10) -> List[str]:
     """
@@ -346,7 +292,7 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
             
             # Step 6: STRICT validation with double checking
             if lastfm_client:
-                validated_album, is_valid, validation_msg, lastfm_tags = validate_and_correct_metal_album(
+                validated_album, is_valid, validation_msg = validate_and_correct_metal_album(
                     lastfm_client, random_album_data, random_metal_artist
                 )
                 
@@ -376,9 +322,6 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                     except Exception:
                         pass
                     
-                    # Get formatted tags for posting
-                    formatted_tags = validated_album.get('formatted_tags', '#randomdiscovery')
-                    
                     # Prepare discovery data with validation info
                     discovery_data = {
                         "origin": {
@@ -389,46 +332,25 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                         "discovery": {
                             **validated_album,
                             "validated_artist": final_artist,
-                            "original_searched_artist": random_metal_artist,
-                            # Ensure tags are included
-                            "lastfm_tags": validated_album.get('lastfm_tags', []),
-                            "metal_tags": validated_album.get('metal_tags', []),
-                            "formatted_tags": formatted_tags
+                            "original_searched_artist": random_metal_artist
                         },
                         "bandcamp": bandcamp_result,
                         "description": f"Based on '{base_album_name}' by {base_artist_name} → Metal-related artist: {random_metal_artist}",
                         "validation": validation_msg,
-                        "similarity_score": f"{similarity:.1%} artist match",
-                        # Also include tags at the top level for easy access
-                        "lastfm_tags": lastfm_tags,
-                        "formatted_tags": formatted_tags
+                        "similarity_score": f"{similarity:.1%} artist match"
                     }
                     
                     # Save discovery to database if user is logged in
                     if st.session_state.get('current_user'):
-                        # Try to save with tags, fallback to without tags if function doesn't support it
-                        try:
-                            save_discovery(
-                                username=st.session_state.current_user,
-                                base_artist=base_artist_name,
-                                base_album=base_album_name,
-                                discovered_artist=validated_album["artist"],
-                                discovered_album=validated_album["album"],
-                                discovered_url=validated_album["url"],
-                                cover_url=validated_album.get("image"),
-                                tags=formatted_tags
-                            )
-                        except TypeError:
-                            # If save_discovery doesn't accept tags parameter, call without it
-                            save_discovery(
-                                username=st.session_state.current_user,
-                                base_artist=base_artist_name,
-                                base_album=base_album_name,
-                                discovered_artist=validated_album["artist"],
-                                discovered_album=validated_album["album"],
-                                discovered_url=validated_album["url"],
-                                cover_url=validated_album.get("image")
-                            )
+                        save_discovery(
+                            username=st.session_state.current_user,
+                            base_artist=base_artist_name,
+                            base_album=base_album_name,
+                            discovered_artist=validated_album["artist"],
+                            discovered_album=validated_album["album"],
+                            discovered_url=validated_album["url"],
+                            cover_url=validated_album.get("image")
+                        )
                     
                     return discovery_data, None
                 else:
@@ -455,18 +377,11 @@ def discover_random_album(base_artist: Optional[str] = None, base_album_obj: Opt
                         "artist": base_artist_name,
                         "album_name": base_album_name
                     },
-                    "discovery": {
-                        **random_album_data,
-                        "lastfm_tags": [],  # Empty because no Last.fm
-                        "metal_tags": [],
-                        "formatted_tags": "#randomdiscovery"
-                    },
+                    "discovery": random_album_data,
                     "bandcamp": bandcamp_result,
                     "description": f"Based on '{base_album_name}' by {base_artist_name} → Related artist: {random_metal_artist}",
                     "validation": "⚠️ No Last.fm validation available",
-                    "similarity_score": "Unknown",
-                    "lastfm_tags": [],  # Empty tags for consistency
-                    "formatted_tags": "#randomdiscovery"
+                    "similarity_score": "Unknown"
                 }
                 
                 return discovery_data, None
