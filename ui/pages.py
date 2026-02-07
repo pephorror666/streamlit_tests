@@ -5,7 +5,6 @@
 
 import streamlit as st
 import webbrowser
-import re
 from typing import List
 from config import ADMIN_NAV_OPTIONS, USER_NAV_OPTIONS, SORT_OPTIONS
 from ui.components import render_header, render_sidebar, render_album_post, render_concert_post
@@ -14,77 +13,6 @@ from services.metadata_extractor import extract_og_metadata
 from services.random_album import discover_random_album
 from utils.helpers import process_tags, show_success_message
 from admin.backup_tools import admin_backup_page
-
-def extract_metal_tags_from_discovery(discovery_data: dict) -> str:
-    """
-    Extract metal tags from discovery data and format them for posting
-    Returns: string of tags (e.g., "#deathmetal #blackmetal #thrash")
-    """
-    if not discovery_data:
-        return "#randomdiscovery"
-    
-    # First, try to get the pre-formatted tags
-    formatted_tags = discovery_data.get('formatted_tags')
-    if formatted_tags and formatted_tags != "#randomdiscovery":
-        return formatted_tags
-    
-    # Fallback: try to get tags from multiple possible locations
-    tags = []
-    
-    # 1. Check for metal_tags in discovery
-    discovery = discovery_data.get('discovery', {})
-    metal_tags = discovery.get('metal_tags', [])
-    
-    # 2. Check for lastfm_tags in discovery
-    lastfm_tags = discovery.get('lastfm_tags', [])
-    
-    # 3. Check for lastfm_tags at the top level
-    if not metal_tags and not lastfm_tags:
-        lastfm_tags = discovery_data.get('lastfm_tags', [])
-    
-    # 4. Check for genres from Spotify
-    spotify_genres = discovery.get('genres', [])
-    
-    # Prioritize metal tags from Last.fm
-    if metal_tags:
-        tags.extend(metal_tags)
-    elif lastfm_tags:
-        # Filter for metal-related tags only
-        metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash', 
-                         'doom', 'power', 'sludge', 'stoner', 'progressive', 'deathcore']
-        
-        for tag in lastfm_tags:
-            tag_lower = tag.lower()
-            if any(keyword in tag_lower for keyword in metal_keywords):
-                tags.append(tag)
-    
-    # If we still don't have tags, check Spotify genres
-    if not tags and spotify_genres:
-        metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash']
-        for genre in spotify_genres:
-            genre_lower = genre.lower()
-            if any(keyword in genre_lower for keyword in metal_keywords):
-                tags.append(genre)
-    
-    # Clean and format tags
-    cleaned_tags = []
-    for tag in tags[:3]:  # Limit to 3 tags
-        # Remove special characters and spaces, convert to lowercase
-        cleaned = re.sub(r'[^\w\s]', '', tag)
-        cleaned = cleaned.lower().replace(' ', '')
-        
-        # Ensure it's a valid tag (at least 2 characters)
-        if len(cleaned) >= 2:
-            # Capitalize first letter for better readability
-            cleaned = cleaned.capitalize() if cleaned.islower() else cleaned
-            cleaned_tags.append(f"#{cleaned}")
-    
-    # If no metal tags found, use default
-    if not cleaned_tags:
-        return "#randomdiscovery"
-    
-    # Return as space-separated string
-    return ' '.join(cleaned_tags)
 
 def main_page():
     """Main app function that handles page routing"""
@@ -219,9 +147,10 @@ def render_album_form():
 def handle_album_submission(url: str, tags_input: str, is_manual: bool = False, 
                            artist: str = "", album_name: str = "", cover_url: str = ""):
     """Handle album form submission"""
-    # Cover handeling
+    # Cover handling
     if cover_url == "":
         cover_url = "https://upload.wikimedia.org/wikipedia/commons/3/3c/No-album-art.png"
+    
     # Check for duplicate URL
     if check_duplicate_url(url):
         st.error("❌ This URL has already been posted. Please share a different album.")
@@ -239,10 +168,10 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
                 "Other",
                 tags
             ):
+                # Clear cache to ensure new data is loaded
+                st.cache_data.clear()
                 show_success_message("✅ Album shared successfully!")
                 st.session_state.show_album_form = False
-                # Force immediate refresh
-                st.session_state.force_refresh = True
                 st.rerun()
                 return True
             else:
@@ -266,10 +195,10 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
                         metadata['platform'],
                         tags
                     ):
+                        # Clear cache to ensure new data is loaded
+                        st.cache_data.clear()
                         show_success_message("✅ Album shared successfully!")
                         st.session_state.show_album_form = False
-                        # Force immediate refresh
-                        st.session_state.force_refresh = True
                         st.rerun()
                         return True
                     else:
@@ -284,13 +213,6 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
 
 def render_albums_list():
     """Load and display albums with sorting and filtering"""
-    # Force refresh if needed
-    if st.session_state.get('force_refresh'):
-        st.session_state.force_refresh = False
-        # Clear any cached data
-        if 'cached_albums' in st.session_state:
-            del st.session_state.cached_albums
-    
     albums = load_albums()
     
     # Apply sorting
@@ -363,6 +285,8 @@ def render_concert_form():
             if bands and venue and city:
                 tags = process_tags(tags_input)
                 if save_concert(st.session_state.current_user, bands, date, venue, city, tags, info):
+                    # Clear cache to ensure new data is loaded
+                    st.cache_data.clear()
                     show_success_message("✅ Concert added successfully!")
                     st.session_state.show_concert_form = False
                     st.rerun()
@@ -420,29 +344,10 @@ def random_album_page():
         st.markdown(f"**{discovery_data['description']}**")
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Show validation info if available
-        if discovery_data.get('validation'):
-            st.info(f"**Validation:** {discovery_data['validation']}")
-        
-        # Show tags if available
-        discovery = discovery_data['discovery']
-        if discovery.get('lastfm_tags'):
-            # Extract metal tags
-            metal_tags = []
-            metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash']
-            
-            for tag in discovery['lastfm_tags'][:5]:  # Show top 5
-                tag_lower = tag.lower()
-                if any(keyword in tag_lower for keyword in metal_keywords):
-                    metal_tags.append(tag)
-            
-            if metal_tags:
-                tags_text = ', '.join(metal_tags[:3])
-                st.caption(f"**Tags:** {tags_text}")
-        
         # Album card
         st.markdown("<div class='random-album-card'>", unsafe_allow_html=True)
         
+        discovery = discovery_data['discovery']
         col_img, col_info = st.columns([1, 2])
         
         with col_img:
@@ -480,8 +385,7 @@ def random_album_page():
             col_idx = 0
             
             with col_actions[col_idx]:
-                with col_actions[col_idx]:
-                    st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
+                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
             
             # Add Bandcamp button if available
@@ -509,31 +413,18 @@ def random_album_page():
             
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                        use_container_width=True,
-                        key="post_to_wall"):
+                           use_container_width=True,
+                           key="post_to_wall"):
                     if st.session_state.current_user:
-                        # Use the Last.fm tags for posting
+                        # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        
-                        # Extract metal tags from discovery data - use pre-formatted tags if available
-                        tags_input = discovery_data.get('formatted_tags')
-                        if not tags_input or tags_input == "#randomdiscovery":
-                            tags_input = extract_metal_tags_from_discovery(discovery_data)
-                        
-                        # Show what tags will be used
-                        if tags_input != "#randomdiscovery":
-                            st.info(f"Using tags: {tags_input}")
+                        #tags_input = "#randomdiscovery"
+                        tags_input = discovery.get('formatted_tags', "#randomdiscovery")
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
-                            # Clear the discovery data to force a new discovery on next view
-                            st.session_state.random_discovery_data = None
-                            # Show success message and force refresh
-                            st.success(f"✅ Album posted to wall!")
-                            show_success_message("✅ Album posted successfully!")
-                            # Force refresh to show the new post
-                            st.rerun()
+                            st.success("✅ Album posted to wall!")
                         else:
                             st.error("❌ Failed to post to wall")
                     else:
