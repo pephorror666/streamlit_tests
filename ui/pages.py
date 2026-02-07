@@ -147,6 +147,9 @@ def render_album_form():
 def handle_album_submission(url: str, tags_input: str, is_manual: bool = False, 
                            artist: str = "", album_name: str = "", cover_url: str = ""):
     """Handle album form submission"""
+    # Cover handeling
+    if cover_url == "":
+        cover_url = "https://upload.wikimedia.org/wikipedia/commons/3/3c/No-album-art.png"
     # Check for duplicate URL
     if check_duplicate_url(url):
         st.error("❌ This URL has already been posted. Please share a different album.")
@@ -344,15 +347,13 @@ def random_album_page():
             if discovery.get('image'):
                 st.image(discovery['image'])
             else:
-                discovery['image'] = "https://upload.wikimedia.org/wikipedia/commons/3/3c/No-album-art.png"
-                st.image(discovery['image'])
-                #st.markdown("""
-                #<div style="width:100%; height:200px; background:#333; 
-                #border-radius:8px; display:flex; align-items:center; 
-                #justify-content:center; color:#666;">
-                #🎵 No cover
-                #</div>
-                #""", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="width:100%; height:200px; background:#333; 
+                border-radius:8px; display:flex; align-items:center; 
+                justify-content:center; color:#666;">
+                🎵 No cover
+                </div>
+                """, unsafe_allow_html=True)
         
         with col_info:
             st.markdown(f"## {discovery['album']}")
