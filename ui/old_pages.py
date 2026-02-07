@@ -5,7 +5,6 @@
 
 import streamlit as st
 import webbrowser
-import re
 from typing import List
 from config import ADMIN_NAV_OPTIONS, USER_NAV_OPTIONS, SORT_OPTIONS
 from ui.components import render_header, render_sidebar, render_album_post, render_concert_post
@@ -14,68 +13,6 @@ from services.metadata_extractor import extract_og_metadata
 from services.random_album import discover_random_album
 from utils.helpers import process_tags, show_success_message
 from admin.backup_tools import admin_backup_page
-
-def extract_metal_tags_from_discovery(discovery_data: dict) -> str:
-    """
-    Extract metal tags from discovery data and format them for posting
-    Returns: string of tags (e.g., "#deathmetal #blackmetal #thrash")
-    """
-    if not discovery_data:
-        return "#randomdiscovery"
-    
-    # Try to get tags from multiple possible locations in the discovery data
-    tags = []
-    
-    # 1. Check for metal_tags in discovery
-    discovery = discovery_data.get('discovery', {})
-    metal_tags = discovery.get('metal_tags', [])
-    
-    # 2. Check for lastfm_tags in discovery
-    lastfm_tags = discovery.get('lastfm_tags', [])
-    
-    # 3. Check for genres from Spotify
-    spotify_genres = discovery.get('genres', [])
-    
-    # Prioritize metal tags from Last.fm
-    if metal_tags:
-        tags.extend(metal_tags)
-    elif lastfm_tags:
-        # Filter for metal-related tags only
-        metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash', 
-                         'doom', 'power', 'sludge', 'stoner', 'progressive', 'deathcore']
-        
-        for tag in lastfm_tags:
-            tag_lower = tag.lower()
-            if any(keyword in tag_lower for keyword in metal_keywords):
-                tags.append(tag)
-    
-    # If we still don't have tags, check Spotify genres
-    if not tags and spotify_genres:
-        metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash']
-        for genre in spotify_genres:
-            genre_lower = genre.lower()
-            if any(keyword in genre_lower for keyword in metal_keywords):
-                tags.append(genre)
-    
-    # Clean and format tags
-    cleaned_tags = []
-    for tag in tags[:3]:  # Limit to 3 tags
-        # Remove special characters and spaces, convert to lowercase
-        cleaned = re.sub(r'[^\w\s]', '', tag)
-        cleaned = cleaned.lower().replace(' ', '')
-        
-        # Ensure it's a valid tag (at least 2 characters)
-        if len(cleaned) >= 2:
-            # Capitalize first letter for better readability
-            cleaned = cleaned.capitalize() if cleaned.islower() else cleaned
-            cleaned_tags.append(f"#{cleaned}")
-    
-    # If no metal tags found, use default
-    if not cleaned_tags:
-        return "#randomdiscovery"
-    
-    # Return as space-separated string
-    return ' '.join(cleaned_tags)
 
 def main_page():
     """Main app function that handles page routing"""
@@ -400,29 +337,10 @@ def random_album_page():
         st.markdown(f"**{discovery_data['description']}**")
         st.markdown("</div>", unsafe_allow_html=True)
         
-        # Show validation info if available
-        if discovery_data.get('validation'):
-            st.info(f"**Validation:** {discovery_data['validation']}")
-        
-        # Show tags if available
-        discovery = discovery_data['discovery']
-        if discovery.get('lastfm_tags'):
-            # Extract metal tags
-            metal_tags = []
-            metal_keywords = ['metal', 'grind', 'metalcore', 'heavy', 'death', 'black', 'thrash']
-            
-            for tag in discovery['lastfm_tags'][:5]:  # Show top 5
-                tag_lower = tag.lower()
-                if any(keyword in tag_lower for keyword in metal_keywords):
-                    metal_tags.append(tag)
-            
-            if metal_tags:
-                tags_text = ', '.join(metal_tags[:3])
-                st.caption(f"**Tags:** {tags_text}")
-        
         # Album card
         st.markdown("<div class='random-album-card'>", unsafe_allow_html=True)
         
+        discovery = discovery_data['discovery']
         col_img, col_info = st.columns([1, 2])
         
         with col_img:
@@ -492,20 +410,14 @@ def random_album_page():
                            use_container_width=True,
                            key="post_to_wall"):
                     if st.session_state.current_user:
-                        # Use the Last.fm tags for posting
+                        # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        
-                        # Extract metal tags from discovery data
-                        tags_input = extract_metal_tags_from_discovery(discovery_data)
+                        tags_input = "#randomdiscovery"
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
-                            # Show the tags that were used
-                            if tags_input != "#randomdiscovery":
-                                st.success(f"✅ Album posted with tags: {tags_input}")
-                            else:
-                                st.success("✅ Album posted to wall!")
+                            st.success("✅ Album posted to wall!")
                             show_success_message("✅ Album posted successfully!")
                         else:
                             st.error("❌ Failed to post to wall")
