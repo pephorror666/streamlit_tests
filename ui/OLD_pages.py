@@ -412,74 +412,22 @@ def random_album_page():
                         st.session_state.random_discovery_data = new_discovery
                     st.rerun()
             col_idx += 1
-    
+            
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                        use_container_width=True,
-                        key="post_to_wall"):
+                           use_container_width=True,
+                           key="post_to_wall"):
                     if st.session_state.current_user:
-                        # Use the improved posting helper
-                        from services.random_album import prepare_discovery_for_posting
+                        # Use the automatic post option with Spotify URL
+                        url = discovery['url']
+                        tags_input = "#randomdiscovery"
                         
-                        # Prepare the posting data
-                        posting_data = discovery_data.get('posting_data', {})
-                        
-                        # If no posting_data in discovery, prepare it now
-                        if not posting_data:
-                            posting_data = prepare_discovery_for_posting({
-                                "discovery": discovery_data['discovery'],
-                                "bandcamp": discovery_data.get('bandcamp')
-                            })
-                        
-                        if posting_data.get('url'):
-                            # Generate tags from discovery genres
-                            discovery = discovery_data['discovery']
-                            
-                            # Start with randomdiscovery tag
-                            tags_input = "#randomdiscovery"
-                            
-                            # Add genre tags if available
-                            if discovery.get('genres'):
-                                # Convert genres to tags
-                                genre_tags = []
-                                for genre in discovery['genres'][:3]:  # Max 3 genres
-                                    # Clean and format
-                                    tag = genre.lower().replace(' ', '').replace('-', '')
-                                    if tag and len(tag) > 1:
-                                        genre_tags.append(f"#{tag}")
-                                
-                                if genre_tags:
-                                    # Combine with randomdiscovery
-                                    tags_input = " ".join(genre_tags) + " " + tags_input
-                            
-                            # First try automatic extraction
-                            from services.metadata_extractor import extract_og_metadata
-                            metadata = extract_og_metadata(posting_data['url'])
-                            
-                            if metadata:
-                                # Try automatic submission with generated tags
-                                success = handle_album_submission(
-                                    posting_data['url'], 
-                                    tags_input,  # Use generated tags
-                                    is_manual=False
-                                )
-                            else:
-                                # Fall back to manual submission with generated tags
-                                success = handle_album_submission(
-                                    posting_data['url'], 
-                                    tags_input,  # Use generated tags
-                                    is_manual=True,
-                                    artist=posting_data.get('artist', discovery_data['discovery']['artist']),
-                                    album_name=posting_data.get('album', discovery_data['discovery']['album']),
-                                    cover_url=posting_data.get('image_url', discovery_data['discovery'].get('image'))
-                                )
-                            
-                            if success:
-                                st.success("✅ Album posted to wall!")
-                            else:
-                                st.error("❌ Failed to post to wall. The URL might not be supported.")
+                        # Call the handle_album_submission function
+                        success = handle_album_submission(url, tags_input, is_manual=False)
+                        if success:
+                            st.success("✅ Album posted to wall!")
                         else:
-                            st.error("❌ Cannot post: No valid URL found for this discovery.")
+                            st.error("❌ Failed to post to wall")
                     else:
                         st.warning("Please login to post to wall")
         
