@@ -6,7 +6,7 @@
 import re
 import requests
 from bs4 import BeautifulSoup
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from config import PLATFORMS
 
 def get_headers_for_url(url: str) -> Dict[str, str]:

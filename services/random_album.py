@@ -38,6 +38,61 @@ def get_random_album_from_wall() -> Optional[Dict]:
         st.error(f"Error getting random album: {e}")
         return None
 
+# Add this function to your random_album.py file:
+
+def prepare_discovery_for_posting(discovery_data: Dict) -> Dict:
+    """
+    Prepare discovery data for posting to wall
+    Ensures we have a valid URL and all required fields
+    """
+    try:
+        discovery = discovery_data.get('discovery', {})
+        bandcamp = discovery_data.get('bandcamp')
+        
+        # Priority 1: Use Bandcamp URL if available
+        if bandcamp and bandcamp.get('url'):
+            return {
+                'url': bandcamp['url'],
+                'artist': bandcamp.get('artist') or discovery.get('artist', ''),
+                'album': bandcamp.get('album') or discovery.get('album', ''),
+                'image_url': discovery.get('image')
+            }
+        
+        # Priority 2: Use Spotify URL
+        spotify_url = discovery.get('url', '')
+        if spotify_url and 'open.spotify.com' in spotify_url:
+            return {
+                'url': spotify_url,
+                'artist': discovery.get('artist', ''),
+                'album': discovery.get('album', ''),
+                'image_url': discovery.get('image')
+            }
+        
+        # Priority 3: Use Last.fm URL
+        artist_name = discovery.get('artist', '')
+        if artist_name:
+            # Create a Last.fm search URL
+            import urllib.parse
+            lastfm_url = f"https://www.last.fm/music/{urllib.parse.quote(artist_name.replace(' ', '+'))}"
+            return {
+                'url': lastfm_url,
+                'artist': artist_name,
+                'album': discovery.get('album', ''),
+                'image_url': discovery.get('image')
+            }
+        
+        # Fallback: Use whatever we have
+        return {
+            'url': discovery.get('url', ''),
+            'artist': discovery.get('artist', ''),
+            'album': discovery.get('album', ''),
+            'image_url': discovery.get('image')
+        }
+        
+    except Exception as e:
+        print(f"Error preparing discovery for posting: {e}")
+        return {}
+
 def normalize_artist_name(artist_name: str) -> str:
     """
     Normalize artist name for better matching:
