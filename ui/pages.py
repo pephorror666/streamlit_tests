@@ -23,7 +23,12 @@ def extract_metal_tags_from_discovery(discovery_data: dict) -> str:
     if not discovery_data:
         return "#randomdiscovery"
     
-    # Try to get tags from multiple possible locations in the discovery data
+    # First, try to get the pre-formatted tags
+    formatted_tags = discovery_data.get('formatted_tags')
+    if formatted_tags and formatted_tags != "#randomdiscovery":
+        return formatted_tags
+    
+    # Fallback: try to get tags from multiple possible locations
     tags = []
     
     # 1. Check for metal_tags in discovery
@@ -33,7 +38,11 @@ def extract_metal_tags_from_discovery(discovery_data: dict) -> str:
     # 2. Check for lastfm_tags in discovery
     lastfm_tags = discovery.get('lastfm_tags', [])
     
-    # 3. Check for genres from Spotify
+    # 3. Check for lastfm_tags at the top level
+    if not metal_tags and not lastfm_tags:
+        lastfm_tags = discovery_data.get('lastfm_tags', [])
+    
+    # 4. Check for genres from Spotify
     spotify_genres = discovery.get('genres', [])
     
     # Prioritize metal tags from Last.fm
@@ -495,8 +504,14 @@ def random_album_page():
                         # Use the Last.fm tags for posting
                         url = discovery['url']
                         
-                        # Extract metal tags from discovery data
-                        tags_input = extract_metal_tags_from_discovery(discovery_data)
+                        # Extract metal tags from discovery data - use pre-formatted tags if available
+                        tags_input = discovery_data.get('formatted_tags')
+                        if not tags_input or tags_input == "#randomdiscovery":
+                            tags_input = extract_metal_tags_from_discovery(discovery_data)
+                        
+                        # Show what tags will be used
+                        if tags_input != "#randomdiscovery":
+                            st.info(f"Using tags: {tags_input}")
                         
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)
