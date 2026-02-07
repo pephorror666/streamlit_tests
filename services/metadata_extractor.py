@@ -5,9 +5,8 @@
 
 import re
 import requests
-import urllib.parse
 from bs4 import BeautifulSoup
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from config import PLATFORMS
 
 def get_headers_for_url(url: str) -> Dict[str, str]:
@@ -32,7 +31,6 @@ def get_headers_for_url(url: str) -> Dict[str, str]:
             'sec-ch-ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
-            'Referer': 'https://bandcamp.com/',
         }
     elif 'spotify' in url_lower:
         # Spotify-specific headers
@@ -40,22 +38,6 @@ def get_headers_for_url(url: str) -> Dict[str, str]:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.9',
-        }
-    elif 'deezer' in url_lower:
-        # Deezer-specific headers
-        return {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://www.deezer.com/',
-        }
-    elif 'tidal' in url_lower:
-        # Tidal-specific headers
-        return {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://tidal.com/',
         }
     else:
         # Generic headers for other platforms
@@ -82,44 +64,18 @@ def extract_artist(metadata: Dict, platform: str) -> str:
     title = metadata.get('og_title', '')
     description = metadata.get('og_description', '')
     
-    # Try common patterns
-    patterns = [
-        (r'(.+?) - (.+)', 2),  # "Artist - Album"
-        (r'(.+?) by (.+)', 1),  # "Album by Artist"
-        (r'(.+?) \| (.+)', 2),  # "Album | Artist"
-        (r'(.+?) – (.+)', 2),  # "Artist – Album" (en dash)
-    ]
-    
-    for pattern, group_idx in patterns:
-        match = re.search(pattern, title)
-        if match:
-            return match.group(group_idx).strip()
-    
-    # Try description patterns
-    if description:
-        # Look for "by Artist" in description
-        by_match = re.search(r'by ([^.,]+?)(?:\.|,|$)', description, re.IGNORECASE)
-        if by_match:
-            return by_match.group(1).strip()
-        
-        # Look for "Artist:" in description
-        artist_match = re.search(r'Artist[:\s]+([^.,]+?)(?:\.|,|$)', description, re.IGNORECASE)
-        if artist_match:
-            return artist_match.group(1).strip()
-    
-    # Try to extract from title if it contains "by"
-    if ' by ' in title.lower():
-        parts = title.lower().split(' by ')
+    if ' - ' in title:
+        parts = title.split(' - ')
         if len(parts) >= 2:
-            return parts[-1].strip().title()
+            return parts[-1].strip()
     
-    # Fallback: try to get the last part after a delimiter
-    for delimiter in [' - ', ' | ', ' – ']:
-        if delimiter in title:
-            parts = title.split(delimiter)
-            if len(parts) >= 2:
-                # Usually the artist is the last part
-                return parts[-1].strip()
+    if 'by' in description:
+        match = re.search(r'by (.+?)$|by (.+?) on', description, re.IGNORECASE)
+        if match:
+            return match.group(1) or match.group(2)
+    
+    if ' by ' in title:
+        return title.split(' by ')[-1].strip()
     
     return 'Unknown Artist'
 
@@ -127,30 +83,12 @@ def extract_album(metadata: Dict, platform: str) -> str:
     """Extract album name from metadata"""
     title = metadata.get('og_title', '')
     
-    # Try common patterns
-    patterns = [
-        (r'(.+?) - (.+)', 1),  # "Artist - Album"
-        (r'(.+?) by (.+)', 1),  # "Album by Artist"
-        (r'(.+?) \| (.+)', 1),  # "Album | Artist"
-        (r'(.+?) – (.+)', 1),  # "Artist – Album" (en dash)
-    ]
+    if ' - ' in title:
+        parts = title.split(' - ')
+        return parts[0].strip()
     
-    for pattern, group_idx in patterns:
-        match = re.search(pattern, title)
-        if match:
-            return match.group(group_idx).strip()
-    
-    # Try to extract from title if it contains "by"
-    if ' by ' in title.lower():
-        parts = title.lower().split(' by ')
-        if len(parts) >= 2:
-            return parts[0].strip()
-    
-    # Fallback: try to get the first part before a delimiter
-    for delimiter in [' - ', ' | ', ' – ']:
-        if delimiter in title:
-            parts = title.split(delimiter)
-            return parts[0].strip()
+    if ' by ' in title:
+        return title.split(' by ')[0].strip()
     
     return title or 'Unknown Album'
 
@@ -161,41 +99,22 @@ def extract_og_metadata(url: str) -> Optional[Dict]:
     Similar to how WhatsApp/Discord/Twitter does it
     """
     try:
-        # Clean and validate URL
-        if not url or not url.startswith(('http://', 'https://')):
-            print(f"Invalid URL: {url}")
-            return None
-        
         headers = get_headers_for_url(url)
         
-        # Create session with headers
+        # For Bandcamp, we might need to follow redirects
         session = requests.Session()
         session.headers.update(headers)
         
-        # Set timeout based on platform
-        timeout = 20 if 'bandcamp' in url.lower() else 10
+        # Increase timeout for Bandcamp
+        timeout = 15 if 'bandcamp' in url.lower() else 8
         
-        # Make the request
         response = session.get(url, timeout=timeout, allow_redirects=True)
         response.encoding = 'utf-8'
         
         if response.status_code != 200:
-            print(f"HTTP {response.status_code} for {url}")
-            
             # Try with a different approach for Bandcamp
             if 'bandcamp' in url.lower():
                 return try_bandcamp_fallback(url, session)
-            
-            # For Spotify, try without SSL verification
-            if 'spotify' in url.lower():
-                try:
-                    response = session.get(url, timeout=timeout, allow_redirects=True, verify=False)
-                    if response.status_code == 200:
-                        # Continue with processing
-                        pass
-                except:
-                    return None
-            
             return None
         
         soup = BeautifulSoup(response.text, 'html.parser')
@@ -203,9 +122,8 @@ def extract_og_metadata(url: str) -> Optional[Dict]:
         
         # Look for Open Graph meta tags
         for meta in soup.find_all('meta', property=True):
-            prop = meta.get('property', '').lower()
+            prop = meta.get('property', '')
             content = meta.get('content', '')
-            
             if prop == 'og:title':
                 metadata['og_title'] = content
             elif prop == 'og:description':
@@ -213,114 +131,35 @@ def extract_og_metadata(url: str) -> Optional[Dict]:
             elif prop == 'og:image':
                 metadata['og_image'] = content
         
-        # Fallback: look for Twitter meta tags
+        # Fallback: look for meta name
         if not metadata.get('og_title'):
             for meta in soup.find_all('meta'):
-                name = meta.get('name', '').lower()
+                name = meta.get('name', '')
                 content = meta.get('content', '')
-                
-                if name == 'twitter:title':
-                    metadata['og_title'] = content
-                elif name == 'twitter:description':
+                if name.lower() == 'description':
                     metadata['og_description'] = content
-                elif name == 'twitter:image':
+                elif name.lower() == 'twitter:title':
+                    metadata['og_title'] = content
+                elif name.lower() == 'twitter:image':
                     metadata['og_image'] = content
-        
-        # Fallback: look for regular meta tags
-        if not metadata.get('og_title'):
-            title_tag = soup.find('title')
-            if title_tag:
-                metadata['og_title'] = title_tag.text.strip()
-            
-            # Look for meta description
-            meta_desc = soup.find('meta', attrs={'name': 'description'})
-            if meta_desc and meta_desc.get('content'):
-                metadata['og_description'] = meta_desc.get('content')
         
         # Special handling for Bandcamp if OG tags not found
         if not metadata.get('og_title') and 'bandcamp' in url.lower():
-            bandcamp_metadata = extract_bandcamp_metadata(soup, url)
-            if bandcamp_metadata:
-                return bandcamp_metadata
+            return extract_bandcamp_metadata(soup, url)
         
         if not metadata.get('og_title'):
-            print(f"No title found for {url}")
             return None
         
-        platform_name = detect_platform(url)
-        
-        # Extract artist and album
-        artist = extract_artist(metadata, platform_name)
-        album_name = extract_album(metadata, platform_name)
-        
-        # Clean up extracted data
-        if artist == 'Unknown Artist' and album_name == 'Unknown Album':
-            # Try to parse from title more aggressively
-            title = metadata.get('og_title', '')
-            if ' - ' in title:
-                parts = title.split(' - ')
-                if len(parts) >= 2:
-                    artist = parts[0].strip()
-                    album_name = parts[1].strip()
-        
-        # Get cover URL
-        cover_url = metadata.get('og_image', '')
-        
-        # If no cover URL but we have Bandcamp, try to find it
-        if not cover_url and 'bandcamp' in url.lower():
-            cover_url = find_bandcamp_cover(soup)
-        
+        platform = detect_platform(url)
         return {
-            'artist': artist,
-            'album_name': album_name,
-            'cover_url': cover_url,
-            'platform': platform_name
+            'artist': extract_artist(metadata, platform),
+            'album_name': extract_album(metadata, platform),
+            'cover_url': metadata.get('og_image', ''),
+            'platform': platform
         }
-        
-    except requests.exceptions.Timeout:
-        print(f"Timeout for {url}")
-        return None
-    except requests.exceptions.RequestException as e:
-        print(f"Request error for {url}: {e}")
-        return None
     except Exception as e:
         print(f"Error extracting metadata from {url}: {e}")
         return None
-
-def find_bandcamp_cover(soup: BeautifulSoup) -> str:
-    """Find cover image in Bandcamp page"""
-    try:
-        # Look for track art
-        track_art = soup.find('a', class_='popupImage')
-        if track_art and track_art.get('href'):
-            return track_art['href']
-        
-        # Look for album art
-        album_art = soup.find('img', id='tralbumArt')
-        if album_art and album_art.get('src'):
-            return album_art['src']
-        
-        # Look for any image with class containing 'art'
-        for img in soup.find_all('img', class_=lambda x: x and 'art' in x.lower()):
-            if img.get('src'):
-                return img['src']
-        
-        # Look for og:image in meta tags
-        og_image = soup.find('meta', property='og:image')
-        if og_image and og_image.get('content'):
-            return og_image.get('content')
-        
-        # Look for any image that might be a cover
-        for img in soup.find_all('img'):
-            src = img.get('src', '')
-            if src and any(ext in src.lower() for ext in ['.jpg', '.jpeg', '.png', '.gif']):
-                if 'cover' in src.lower() or 'album' in src.lower():
-                    return src
-        
-    except Exception as e:
-        print(f"Error finding Bandcamp cover: {e}")
-    
-    return ''
 
 def extract_bandcamp_metadata(soup: BeautifulSoup, url: str) -> Optional[Dict]:
     """Extract metadata specifically from Bandcamp pages"""
@@ -344,14 +183,25 @@ def extract_bandcamp_metadata(soup: BeautifulSoup, url: str) -> Optional[Dict]:
             if len(parts) >= 2:
                 album_name = parts[0].strip()
                 artist = parts[1].replace('| bandcamp', '').strip().title()
-        elif ' - ' in title:
-            parts = title.split(' - ')
-            if len(parts) >= 2:
-                artist = parts[0].strip()
-                album_name = parts[1].strip()
         
         # Try to get cover image
-        cover_url = find_bandcamp_cover(soup)
+        cover_url = ''
+        
+        # Look for track art
+        track_art = soup.find('a', class_='popupImage')
+        if track_art and track_art.get('href'):
+            cover_url = track_art['href']
+        else:
+            # Look for album art
+            album_art = soup.find('img', id='tralbumArt')
+            if album_art and album_art.get('src'):
+                cover_url = album_art['src']
+            else:
+                # Look for any image with class containing 'art'
+                for img in soup.find_all('img', class_=lambda x: x and 'art' in x.lower()):
+                    if img.get('src'):
+                        cover_url = img['src']
+                        break
         
         # Clean up artist name
         if artist.lower().endswith('| bandcamp'):
@@ -377,11 +227,10 @@ def try_bandcamp_fallback(url: str, session: requests.Session) -> Optional[Dict]
             'Accept-Language': 'en-us',
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
-            'Referer': 'https://bandcamp.com/',
         }
         
         session.headers.update(mobile_headers)
-        response = session.get(url, timeout=20, allow_redirects=True)
+        response = session.get(url, timeout=15, allow_redirects=True)
         
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')

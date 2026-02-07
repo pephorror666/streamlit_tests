@@ -1,5 +1,0 @@
-.streamlit/secrets.toml
-metal_music.db
-services/__pycache__/bandcamp_service.cpython-312.pyc
-services/__pycache__/metadata_extractor.cpython-312.pyc
-/services/__pycache__
