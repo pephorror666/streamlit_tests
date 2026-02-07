@@ -380,11 +380,9 @@ def random_album_page():
             
             col_idx = 0
             
+            # Use st.link_button() instead of st.button() with webbrowser
             with col_actions[col_idx]:
-                if st.button("🎵 Open in Spotify", 
-                           use_container_width=True,
-                           key="open_spotify"):
-                    webbrowser.open_new_tab(discovery['url'])
+                st.link_button("🎵 Open in Spotify", discovery['url'], use_container_width=True)
             col_idx += 1
             
             # Add Bandcamp button if available
