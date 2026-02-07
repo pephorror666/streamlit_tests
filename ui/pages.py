@@ -388,10 +388,7 @@ def random_album_page():
             # Add Bandcamp button if available
             if discovery_data.get('bandcamp'):
                 with col_actions[col_idx]:
-                    if st.button("🎶 Open in Bandcamp", 
-                               use_container_width=True,
-                               key="open_bandcamp"):
-                        webbrowser.open_new_tab(discovery_data['bandcamp']['url'])
+                    st.link_button("🎶 Open in Bandcamp", discovery_data['bandcamp']['url'], use_container_width=True)
                 col_idx += 1
             
             with col_actions[col_idx]:
