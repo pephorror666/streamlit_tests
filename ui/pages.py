@@ -418,11 +418,19 @@ def random_album_page():
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        # Use the tags from the discovery result instead of hardcoded "#randomdiscovery"
-                        tags_input = discovery.get('formatted_tags', "#randomdiscovery")
+                        
+                        # Get the metal tags list from the discovery
+                        metal_tags = discovery.get('metal_tags', [])
+                        
+                        # Convert the list to a string format that process_tags expects
+                        if metal_tags:
+                            # Take up to 3 metal tags and format them with #
+                            tags_to_use = ' '.join([f"#{tag}" for tag in metal_tags[:3]])
+                        else:
+                            tags_to_use = "#randomdiscovery"
                         
                         # Call the handle_album_submission function with proper handling
-                        success = handle_album_submission(url, tags_input, is_manual=False)
+                        success = handle_album_submission(url, tags_to_use, is_manual=False)
                         
                         # Clear the discovery data to force a refresh
                         if success:
@@ -431,7 +439,6 @@ def random_album_page():
                             st.success("✅ Album posted to wall! The wall has been updated.")
                             # Force a rerun to refresh the page
                             st.rerun()
-                        # Note: handle_album_submission already shows error messages if it fails
                     else:
                         st.warning("Please login to post to wall")
         
