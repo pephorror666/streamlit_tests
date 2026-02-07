@@ -241,6 +241,8 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
             ):
                 show_success_message("✅ Album shared successfully!")
                 st.session_state.show_album_form = False
+                # Force immediate refresh
+                st.session_state.force_refresh = True
                 st.rerun()
                 return True
             else:
@@ -266,6 +268,8 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
                     ):
                         show_success_message("✅ Album shared successfully!")
                         st.session_state.show_album_form = False
+                        # Force immediate refresh
+                        st.session_state.force_refresh = True
                         st.rerun()
                         return True
                     else:
@@ -280,6 +284,13 @@ def handle_album_submission(url: str, tags_input: str, is_manual: bool = False,
 
 def render_albums_list():
     """Load and display albums with sorting and filtering"""
+    # Force refresh if needed
+    if st.session_state.get('force_refresh'):
+        st.session_state.force_refresh = False
+        # Clear any cached data
+        if 'cached_albums' in st.session_state:
+            del st.session_state.cached_albums
+    
     albums = load_albums()
     
     # Apply sorting
@@ -498,8 +509,8 @@ def random_album_page():
             
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                           use_container_width=True,
-                           key="post_to_wall"):
+                        use_container_width=True,
+                        key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the Last.fm tags for posting
                         url = discovery['url']
@@ -516,12 +527,13 @@ def random_album_page():
                         # Call the handle_album_submission function
                         success = handle_album_submission(url, tags_input, is_manual=False)
                         if success:
-                            # Show the tags that were used
-                            if tags_input != "#randomdiscovery":
-                                st.success(f"✅ Album posted with tags: {tags_input}")
-                            else:
-                                st.success("✅ Album posted to wall!")
+                            # Clear the discovery data to force a new discovery on next view
+                            st.session_state.random_discovery_data = None
+                            # Show success message and force refresh
+                            st.success(f"✅ Album posted to wall!")
                             show_success_message("✅ Album posted successfully!")
+                            # Force refresh to show the new post
+                            st.rerun()
                         else:
                             st.error("❌ Failed to post to wall")
                     else:
