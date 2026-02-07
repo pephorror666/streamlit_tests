@@ -40,6 +40,8 @@ def get_random_album_from_wall() -> Optional[Dict]:
 
 # Add this function to your random_album.py file:
 
+# Add this to your random_album.py file:
+
 def prepare_discovery_for_posting(discovery_data: Dict) -> Dict:
     """
     Prepare discovery data for posting to wall
@@ -72,7 +74,6 @@ def prepare_discovery_for_posting(discovery_data: Dict) -> Dict:
         artist_name = discovery.get('artist', '')
         if artist_name:
             # Create a Last.fm search URL
-            import urllib.parse
             lastfm_url = f"https://www.last.fm/music/{urllib.parse.quote(artist_name.replace(' ', '+'))}"
             return {
                 'url': lastfm_url,
