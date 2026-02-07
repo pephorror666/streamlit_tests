@@ -413,20 +413,25 @@ def random_album_page():
             
             with col_actions[col_idx]:
                 if st.button("📤 Post to Wall", 
-                           use_container_width=True,
-                           key="post_to_wall"):
+                        use_container_width=True,
+                        key="post_to_wall"):
                     if st.session_state.current_user:
                         # Use the automatic post option with Spotify URL
                         url = discovery['url']
-                        #tags_input = "#randomdiscovery"
+                        # Use the tags from the discovery result instead of hardcoded "#randomdiscovery"
                         tags_input = discovery.get('formatted_tags', "#randomdiscovery")
                         
-                        # Call the handle_album_submission function
+                        # Call the handle_album_submission function with proper handling
                         success = handle_album_submission(url, tags_input, is_manual=False)
+                        
+                        # Clear the discovery data to force a refresh
                         if success:
-                            st.success("✅ Album posted to wall!")
-                        else:
-                            st.error("❌ Failed to post to wall")
+                            # Clear the discovery data so next time it fetches fresh data
+                            st.session_state.random_discovery_data = None
+                            st.success("✅ Album posted to wall! The wall has been updated.")
+                            # Force a rerun to refresh the page
+                            st.rerun()
+                        # Note: handle_album_submission already shows error messages if it fails
                     else:
                         st.warning("Please login to post to wall")
         
